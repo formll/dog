@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dog_optimizer"
-version = "1.0"
+name = "dog-optimizer"
+version = "1.0.1"
 authors = [
   { name="Maor Ivgi" },
   { name="Oliver Hinder" },

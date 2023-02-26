@@ -20,12 +20,12 @@ class DoG(Optimizer):
 
     def __init__(self, params, reps_rel: float, lr: float = 1.0,
                  weight_decay: float = 0.0, eps: float = 1e-8, init_eta: Optional[float] = None):
-        r"""Distance over Gradients - an adaptive stochadstic optimizer.
+        r"""Distance over Gradients - an adaptive stochastic optimizer.
 
         DoG updates parameters x_t with stochastic gradients g_t according to:
         .. math::
             \begin{aligned}
-                eta_t & = \frac{ max_{i \le t}{\|x_i - x_0\|} }{ \sqrt{\sum_{i \le t }\|g_i\|^2 + eps}} }, \\
+                eta_t & = \frac{ max_{i \le t}{\|x_i - x_0\|} }{ \sqrt{\sum_{i \le t }{\|g_i\|^2 + eps}} }, \\
                 x_{t+1} & = x_{t} - eta_t * g_t,
             \end{aligned}
 

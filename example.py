@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
-from dog_optimizer import DoG, LDoG, PolynomialDecayAverager
+from dog import DoG, LDoG, PolynomialDecayAverager
 
 
 class Net(nn.Module):

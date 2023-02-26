@@ -11,12 +11,12 @@ To install the package, simply run `pip install dog-optimizer`.
 DoG (or LDoG) are implemented using the standard pytorch optimizer interface. After installing the pacakge with `pip install dog-optimizer`,
 All you need to do is replace the line that creates your optimizer with 
 ```python
-from dog_optimizer import DoG
+from dog import DoG
 optimizer = DoG(optimizer args)
 ```
 for DoG, or
 ```python
-from dog_optimizer import LDoG
+from dog import LDoG
 optimizer = LDoG(optimizer args)
 ```
 for LDoG, 
@@ -26,7 +26,7 @@ To see the list of all available parameters, run `help(DoG)` or `help(LDoG)`.
 
 Using the polynomial decay averager is also easy. Simply create it with 
 ```python
-from dog_optimizer import PolynomialDecayAverager
+from dog import PolynomialDecayAverager
 averager = PolynomialDecayAverager(model)
 ```
 then, after each `optimizer.step()`, call `averager.step()` as well.
@@ -41,7 +41,7 @@ However, as discussed in the paper, DoG has an initial step movement parameter
 $r_{\epsilon}$ that must be small enough to avoid destructively updates that cause divergence, 
 but an extremely small value of $r_{\epsilon}$ would slow down training. 
 We recommend choosing $r_{\epsilon}$ relative to the norm of the initial weights $x_0$. In particular, we set 
-$r_{\epsilon}$ to be `reps_rel` time $1+\|x_0\|$, where `reps_rel` is a configurable parameter of the optimizer. The default value 
+$r_{\epsilon}$ to be `reps_rel` $\times (1+\rVert x_0 \lVert)$, where `reps_rel` is a configurable parameter of the optimizer. The default value 
 of `reps_rel` is 1e-6, and we have found it to work well most of the time. However, in our experiments we did encounter 
 some situations that required different values of `reps_rel`:
 - If optimization diverges early, it is likely that `reps_rel` (and hence $r_{\epsilon}$) is too large: 
