@@ -16,9 +16,9 @@ class DoG(Optimizer):
          `DoG is SGD's Best Friend: A Parameter-Free Dynamic Step Size Schedule` (Ivgi et al., 2023)
     """
 
-    __version__ = '1.0.0'
+    __version__ = '1.0.2'
 
-    def __init__(self, params, reps_rel: float, lr: float = 1.0,
+    def __init__(self, params, reps_rel: float = 1e-6, lr: float = 1.0,
                  weight_decay: float = 0.0, eps: float = 1e-8, init_eta: Optional[float] = None):
         r"""Distance over Gradients - an adaptive stochastic optimizer.
 

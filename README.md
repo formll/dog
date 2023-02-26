@@ -4,11 +4,33 @@ This repository contains the implementation of the algorithms in the paper
 [DoG is SGD's Best Friend: A Parameter-Free Dynamic Step Size Schedule](https://arxiv.org/abs/2302.12022)
 by Maor Ivgi, Oliver Hinder and Yair Carmon.
 
+## Algorithm
+DoG ("Distance over Gradients") is a parameter-free stochastic optimizer. 
+DoG updates parameters $x_t$ with stochastic gradients $g_t$ according to:
+```math
+\begin{aligned}
+   \eta_t & = \frac{ \bar{r}_t }{ \sqrt{\sum_{i \le t }{\lVert g_i\rVert ^2 + \epsilon}} } \\   
+   x_{t+1} & = x_{t} - \eta_t \cdot g_t
+  \end{aligned}
+```
+where
+```math
+\begin{equation*}
+\bar{r}_t = \begin{cases}
+\text{max}_{i \le t}{\lVert x_i - x_0 \rVert} & t \ge 1 \\
+r_{\epsilon} & t=0.
+\end{cases}
+\end{equation*}
+```
+The initial movement parameter $r_{\epsilon}$ should be chosen small relative to the distance between $x_0$ and the nearest optimum $x^\star$ (see additional discussion below).
+
+LDoG (layerwise DoG) is a variant of DoG that applies the above update rule separately to every element in the list of parameters provided to the optimizer object.
+
 ## Installation
 To install the package, simply run `pip install dog-optimizer`.
 
 ## Usage
-DoG (or LDoG) are implemented using the standard pytorch optimizer interface. After installing the pacakge with `pip install dog-optimizer`,
+DoG and LDoG are implemented using the standard pytorch optimizer interface. After installing the pacakge with `pip install dog-optimizer`,
 All you need to do is replace the line that creates your optimizer with 
 ```python
 from dog import DoG
