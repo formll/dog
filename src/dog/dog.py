@@ -13,10 +13,11 @@ logger = logging.getLogger(__name__)
 class DoG(Optimizer):
     """
         DoG (Distance over Gradients) is a parameter-free adaptive optimizer, proposed in
-         `DoG is SGD's Best Friend: A Parameter-Free Dynamic Step Size Schedule` (Ivgi et al., 2023)
+         `DoG is SGD's Best Friend: A Parameter-Free Dynamic Step Size Schedule` (Ivgi et al., 2023).
+       IMPORTANT: for best performance, DoG must be combined with iterate averaging.
     """
 
-    __version__ = '1.0.2'
+    __version__ = '1.0.3'
 
     def __init__(self, params, reps_rel: float = 1e-6, lr: float = 1.0,
                  weight_decay: float = 0.0, eps: float = 1e-8, init_eta: Optional[float] = None):
@@ -28,8 +29,11 @@ class DoG(Optimizer):
                 eta_t & = \frac{ max_{i \le t}{\|x_i - x_0\|} }{ \sqrt{\sum_{i \le t }{\|g_i\|^2 + eps}} }, \\
                 x_{t+1} & = x_{t} - eta_t * g_t,
             \end{aligned}
-
-
+            
+        IMPORTANT: Since we do not employ a step-size decay scheme, ITERATE AVERAGING IS CRUCIAL to obtain 
+        the best performance. This package provides an implementation of the polynomial decay averaging 
+        that is effective and does not require tuning.
+        
         Args:
             params (iterable): iterable of parameters to optimize or dicts defining parameter groups
             reps_rel (float): value to use to compute the  initial distance (r_epsilon in the paper).
@@ -175,6 +179,7 @@ class LDoG(DoG):
         Layer-wise DoG, as described in:
        `DoG is SGD's Best Friend: A Parameter-Free Dynamic Step Size Schedule` (Ivgi et al., 2023).
         LDoG applies the DoG formula defined in the DoG class, but for each layer separately.
+        IMPORTANT: for best performance, L-DoG must be combined with iterate averaging.
     """
     def _update_group_state(self, group, init):
         # treat each layer in the group as a separate block
