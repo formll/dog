@@ -4,6 +4,8 @@ This repository contains the implementation of the algorithms in the paper
 [DoG is SGD's Best Friend: A Parameter-Free Dynamic Step Size Schedule](https://arxiv.org/abs/2302.12022)
 by Maor Ivgi, Oliver Hinder and Yair Carmon.
 
+**IMPORTANT:** For best performance (and for fair comparison to other methods) **DoG/L-DoG must be combined with iterate averaging!** This package includes an easy-to-use [averager class](<#iterate-averaging>) - its default configuration should work well out of the box.
+
 ## Algorithm
 DoG ("Distance over Gradients") is a parameter-free stochastic optimizer. 
 DoG updates parameters $x_t$ with stochastic gradients $g_t$ according to:
@@ -45,8 +47,8 @@ for LDoG,
 where `optimizer args` follows the standard pytorch optimizer syntex. 
 To see the list of all available parameters, run `help(DoG)` or `help(LDoG)`.
 
-
-Using the polynomial decay averager is also easy. Simply create it with 
+### Iterate averaging
+We provide an implementation of the polynomial decay averaging used throughout our experimentes. TO use it simply create a `PolynomialDecayAverager` with 
 ```python
 from dog import PolynomialDecayAverager
 averager = PolynomialDecayAverager(model)
@@ -54,6 +56,7 @@ averager = PolynomialDecayAverager(model)
 then, after each `optimizer.step()`, call `averager.step()` as well.
 You can then get both the current model and the averaged model with `averager.base_model` and `averager.averaged_model` respectively.
 
+### Example script
 An example of how to use the above to train a simple CNN on MNIST can be found in `examples/mnist.py` 
 (based on this [pytorch example](https://github.com/pytorch/examples/blob/main/mnist/main.py)).
 
