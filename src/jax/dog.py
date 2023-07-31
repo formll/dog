@@ -3,13 +3,14 @@ from typing import Optional, NamedTuple
 import chex
 import jax
 import jax.numpy as jnp
+from optax import ScalarOrSchedule
 from optax._src import base, combine, transform
 from optax._src.alias import _scale_by_learning_rate
 
 
 class ScaleByDogState(NamedTuple):
     """State for the Adam algorithm."""
-    step_count: chex.Array  # shape=(), dtype=jnp.int32.
+    step_count: chex.Array  # shape=(), dtype=jnp.int32.  # TODO - seems like this is not the way to define scalar?
     rbar: chex.Array
     g: chex.Array
     init_buffer: chex.Array
@@ -34,8 +35,6 @@ def scale_by_dog(
 
     def update_fn(updates, state, params=None):
         # updates are the gradients if they were not scaled yet
-        del params
-
         if weight_decay > 0.0:
             raise NotImplementedError('weight decay is not implemented yet')
             # updates = jax.tree_multimap(lambda p, g: g + weight_decay * p, params, updates)
@@ -67,7 +66,7 @@ def scale_by_dog(
 
 
 def DoG(
-        learning_rate: transform.ScaleBySchedule,
+        learning_rate: ScalarOrSchedule,
         reps_rel: float = 1e-6,
         eps: float = 1e-8,
         init_eta: Optional[float] = None,
@@ -81,11 +80,6 @@ def DoG(
 
 ############################################
 
-class ScaleByDogState(NamedTuple):
-    """State for the Adam algorithm."""
-    step_count: chex.Array  # shape=(), dtype=jnp.int32.
-    rbar: base.Updates
-    g: base.Updates
 
 def init_ldog_params(params, reps_rel=1e-6, lr=1.0, eps=1e-8, init_eta=None):
     rbar = jax.tree_map(lambda p: reps_rel * (1 + jnp.linalg.norm(p)), params)

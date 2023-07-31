@@ -1,4 +1,9 @@
 # pip install jax flax tensorflow-datasets
+# conda create -n jdog python=3.8
+# conda install -c conda-forge jax=0.3.25
+# pip install --upgrade jaxlib==0.4.11
+# conda install -c conda-forge flax
+# conda install -c conda-forge tensorflow tensorflow-datasets
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -8,6 +13,40 @@ from flax.training.common_utils import onehot
 from flax.training import checkpoints
 from src.jax.dog import DoG  # , LDoG, PolynomialDecayAverager
 import tensorflow_datasets as tfds
+
+def train_epoch(state, train_loader, train_step, epoch, log_interval):
+    metrics = []
+    for i, batch in enumerate(train_loader(), start=1):
+        batch = jax.tree_map(lambda x: jnp.asarray(x).astype(jnp.float32), batch)
+        state, loss = train_step(state, (batch['image'], batch['label']))
+        metrics.append(loss)
+        if i % log_interval == 0:
+            print(f'Epoch: {epoch}, Step: {i}, Loss: {np.mean(metrics)}')
+            metrics = []
+    return state, {'loss': np.mean(metrics)}
+
+
+def compute_loss(logits, labels):
+    return -jnp.mean(jnp.sum(labels * logits, axis=-1))
+
+
+def compute_accuracy(logits, labels):
+    return jnp.mean(jnp.argmax(logits, -1) == jnp.argmax(labels, -1))
+
+
+def test_epoch(state, test_loader):
+    test_loss = []
+    test_accuracy = []
+    for batch in test_loader():
+        batch = jax.tree_map(lambda x: jnp.asarray(x).astype(jnp.float32), batch)
+        labels = onehot(batch['label'], 10)
+        logits = state.apply_fn({'params': state.params}, batch['image'])
+        test_loss.append(compute_loss(logits, labels))
+        test_accuracy.append(compute_accuracy(logits, labels))
+    return {'loss': np.mean(jnp.array(test_loss)),
+            'accuracy': np.mean(jnp.array(test_accuracy))}
+
+
 
 
 def get_data_loader(data_dir, batch_size, split='train'):
@@ -19,19 +58,20 @@ def get_data_loader(data_dir, batch_size, split='train'):
     def gen():
         for batch in tfds.as_numpy(ds):
             images = batch['image'] / 255.0  # normalization
-            images = np.expand_dims(images, axis=-1)
+            # images = np.expand_dims(images, axis=-1)
             labels = batch['label']
             yield {'image': images, 'label': labels}
 
     return gen
 
 
-def get_data_loaders(train_batch_size, test_batch_size):
-    train_ds = get_data_loader(data_dir='../data', batch_size=train_batch_size, split='train')
-    test_ds = get_data_loader(data_dir='../data', batch_size=test_batch_size, split='test')
+def get_data_loaders(train_batch_size, test_batch_size, data_dir):
+    train_ds = get_data_loader(data_dir=data_dir, batch_size=train_batch_size, split='train')
+    test_ds = get_data_loader(data_dir=data_dir, batch_size=test_batch_size, split='test')
     return train_ds, test_ds
 
 
+# TODO - something about the network doesn't work as expected. Need to start with SGD, see that it works and then move to dog
 class Net(nn.Module):
     def setup(self):
         self.conv1 = nn.Conv(features=32, kernel_size=(3, 3))
@@ -86,7 +126,7 @@ def create_model_and_optimizer(ldog, lr, seed=0):
 
 def main():
     # Training settings
-    data_root = '../data'
+    data_dir = '/specific/netapp5/joberant/data_nobck/maorivgi/cache/data'
     batch_size = 64
     test_batch_size = 1000
     epochs = 14
@@ -105,7 +145,7 @@ def main():
     device = use_cuda[0] if use_cuda else jax.devices("cpu")[0]
 
     # here we will have a placeholder function to simulate PyTorch's DataLoader
-    train_loader, test_loader = get_data_loaders(batch_size, test_batch_size)
+    train_loader, test_loader = get_data_loaders(batch_size, test_batch_size, data_dir)
 
     initial_params, model, optimizer = create_model_and_optimizer(ldog, lr, seed)
     state = train_state.TrainState.create(
@@ -114,11 +154,11 @@ def main():
     # averager = PolynomialDecayAverager(model, gamma=avg_gamma)
 
     for epoch in range(1, epochs + 1):
-        # state, train_metrics = train_epoch(state, train_loader, train_step, epoch, log_interval)
-        # test_metrics = test_epoch(state, test_loader)
+        state, train_metrics = train_epoch(state, train_loader, train_step, epoch, log_interval)
+        test_metrics = test_epoch(state, test_loader)
         #
-        # print('Test set: Loss = {:.4f}, Accuracy = {:.2f}%\n'.format(
-        #     test_metrics['loss'], test_metrics['accuracy'] * 100))
+        print('Test set: Loss = {:.4f}, Accuracy = {:.2f}%\n'.format(
+            test_metrics['loss'], test_metrics['accuracy'] * 100))
         print('hi')
         pass
 
