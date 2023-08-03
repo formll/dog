@@ -121,6 +121,9 @@ def create_model_and_optimizer(ldog, lr, seed=0):
     opt_class = DoG
     optimizer = opt_class(learning_rate=lr, reps_rel=1e-6, eps=1e-8, init_eta=None, weight_decay=0.0)
 
+    # import optax
+    # optimizer = optax.adam(learning_rate=lr)
+
     return initial_params, model, optimizer
 
 

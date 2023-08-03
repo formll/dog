@@ -3,6 +3,7 @@ from typing import Optional, NamedTuple
 import chex
 import jax
 import jax.numpy as jnp
+import jax.lax as lax
 from optax import ScalarOrSchedule
 from optax._src import base, combine, transform
 from optax._src.alias import _scale_by_learning_rate
@@ -39,26 +40,35 @@ def scale_by_dog(
             raise NotImplementedError('weight decay is not implemented yet')
             # updates = jax.tree_multimap(lambda p, g: g + weight_decay * p, params, updates)
 
-        if state.step_count == 0:
+        def first_update(_):
             init_buffer = jnp.hstack([v.flatten() for p in params.values() for v in p.values()])
             params_norm = jnp.linalg.norm(
                 jnp.hstack([v.flatten() for p in params.values() for v in p.values()]))  # biases and kernels
             rbar = reps_rel * (1 + params_norm)
-        else:
+
+            grads_flat = jnp.hstack([v.flatten() for g in updates.values() for v in g.values()])
+            g = state.g + jnp.sum(grads_flat ** 2)
+
+            eta = jnp.array(init_eta if init_eta is not None else rbar / jnp.sqrt(g + eps))
+
+            return rbar, init_buffer, g, eta
+
+        def general_update(_):
             init_buffer = state.init_buffer
             params_flat = jnp.hstack(jnp.hstack([v.flatten() for p in params.values() for v in p.values()]))
-            rbar = jnp.maximum(state['rbar'], jnp.linalg.norm(params_flat-init_buffer))
+            rbar = jnp.maximum(state.rbar, jnp.linalg.norm(params_flat - init_buffer))
 
-        grads_flat = jnp.hstack([v.flatten() for g in updates.values() for v in g.values()])
-        g = state.g + jnp.sum(grads_flat ** 2)
+            grads_flat = jnp.hstack([v.flatten() for g in updates.values() for v in g.values()])
+            g = state.g + jnp.sum(grads_flat ** 2)
 
-        if state.step_count == 0:
-            eta = jnp.array([init_eta if init_eta is not None else rbar / jnp.sqrt(g + eps)])
-        else:
-            eta = state['eta'][0] * rbar / jnp.sqrt(g + eps)
+            eta = rbar / jnp.sqrt(g + eps)
+
+            return rbar, init_buffer, g, eta
+
+        rbar, init_buffer, g, eta = lax.cond(state.step_count == 0, first_update, general_update, None)
 
         step_count = state.step_count + 1
-        updates = updates * eta  # scaling by lr will come later if needed
+        updates = jax.tree_util.tree_map(lambda u: eta*u, updates)  # scaling by lr will come later if needed
 
         return updates, ScaleByDogState(step_count=step_count, rbar=rbar, g=g, init_buffer=init_buffer)
 
