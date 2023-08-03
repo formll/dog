@@ -10,7 +10,7 @@ from optax._src.alias import _scale_by_learning_rate
 
 
 class ScaleByDogState(NamedTuple):
-    """State for the Adam algorithm."""
+    """State for the DoG algorithm."""
     step_count: chex.Array  # shape=(), dtype=jnp.int32.  # TODO - seems like this is not the way to define scalar?
     rbar: chex.Array
     g: chex.Array
@@ -41,6 +41,7 @@ def scale_by_dog(
             # updates = jax.tree_multimap(lambda p, g: g + weight_decay * p, params, updates)
 
         def first_update(_):
+            # TODO - maybe should use tree_map here instead of for loops
             init_buffer = jnp.hstack([v.flatten() for p in params.values() for v in p.values()])
             params_norm = jnp.linalg.norm(
                 jnp.hstack([v.flatten() for p in params.values() for v in p.values()]))  # biases and kernels

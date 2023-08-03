@@ -2,16 +2,18 @@
 # conda create -n jdog python=3.8
 # conda install -c conda-forge jax=0.3.25
 # pip install --upgrade jaxlib==0.4.11
+# Should try: pip install --upgrade jax jaxlib==0.1.70+cuda110 -f https://storage.googleapis.com/jax-releases/jax_releases.html
 # conda install -c conda-forge flax
 # conda install -c conda-forge tensorflow tensorflow-datasets
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
 from flax import linen as nn
 from flax.training import train_state
 from flax.training.common_utils import onehot
 from flax.training import checkpoints
-from src.jax.dog import DoG  # , LDoG, PolynomialDecayAverager
+from src.jax import DoG, polynomial_decay_averaging, get_av_model  # , LDoG, PolynomialDecayAverager
 import tensorflow_datasets as tfds
 
 def train_epoch(state, train_loader, train_step, epoch, log_interval):
@@ -23,6 +25,8 @@ def train_epoch(state, train_loader, train_step, epoch, log_interval):
         if i % log_interval == 0:
             print(f'Epoch: {epoch}, Step: {i}, Loss: {np.mean(metrics)}')
             metrics = []
+        if i == 250:  # TODO - remove!
+            break
     return state, {'loss': np.mean(metrics)}
 
 
@@ -37,14 +41,23 @@ def compute_accuracy(logits, labels):
 def test_epoch(state, test_loader):
     test_loss = []
     test_accuracy = []
+    test_loss_av = []
+    test_accuracy_av = []
     for batch in test_loader():
         batch = jax.tree_map(lambda x: jnp.asarray(x).astype(jnp.float32), batch)
         labels = onehot(batch['label'], 10)
+
         logits = state.apply_fn({'params': state.params}, batch['image'])
         test_loss.append(compute_loss(logits, labels))
         test_accuracy.append(compute_accuracy(logits, labels))
+
+        logits = state.apply_fn({'params': get_av_model(state.opt_state)}, batch['image'])
+        test_loss_av.append(compute_loss(logits, labels))
+        test_accuracy_av.append(compute_accuracy(logits, labels))
     return {'loss': np.mean(jnp.array(test_loss)),
-            'accuracy': np.mean(jnp.array(test_accuracy))}
+            'accuracy': np.mean(jnp.array(test_accuracy)),
+            'loss_av': np.mean(jnp.array(test_loss_av)),
+            'accuracy_av': np.mean(jnp.array(test_accuracy_av))}
 
 
 
@@ -121,8 +134,8 @@ def create_model_and_optimizer(ldog, lr, seed=0):
     opt_class = DoG
     optimizer = opt_class(learning_rate=lr, reps_rel=1e-6, eps=1e-8, init_eta=None, weight_decay=0.0)
 
-    # import optax
-    # optimizer = optax.adam(learning_rate=lr)
+    averager = polynomial_decay_averaging(gamma=8)  # TODO - get gamma from outside
+    optimizer = optax.chain(optimizer, averager)
 
     return initial_params, model, optimizer
 
@@ -151,19 +164,17 @@ def main():
     train_loader, test_loader = get_data_loaders(batch_size, test_batch_size, data_dir)
 
     initial_params, model, optimizer = create_model_and_optimizer(ldog, lr, seed)
+
     state = train_state.TrainState.create(
         apply_fn=model.apply, params=initial_params, tx=optimizer)
 
-    # averager = PolynomialDecayAverager(model, gamma=avg_gamma)
 
     for epoch in range(1, epochs + 1):
         state, train_metrics = train_epoch(state, train_loader, train_step, epoch, log_interval)
         test_metrics = test_epoch(state, test_loader)
         #
-        print('Test set: Loss = {:.4f}, Accuracy = {:.2f}%\n'.format(
-            test_metrics['loss'], test_metrics['accuracy'] * 100))
-        print('hi')
-        pass
+        print('Test set: Loss = {:.4f}, Accuracy = {:.2f}%, Loss_av = {:.4f}, Accuracy_av = {:.2f}%\n'.format(
+            test_metrics['loss'], test_metrics['accuracy'] * 100, test_metrics['loss_av'], test_metrics['accuracy_av'] * 100))
 
     if save_model:
         checkpoints.save_checkpoint(".", state, epoch, keep=3)

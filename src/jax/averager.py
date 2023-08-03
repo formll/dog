@@ -1,70 +1,52 @@
-import copy
+from typing import Optional, NamedTuple
+
+import chex
+from optax._src import utils
+import optax
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
-from flax.training import Model, state_dict, restore_state_dict
+from optax._src import base, combine, transform
 
-class PolynomialDecayAverager:
-    """
-    Averaging model weights using a polynomial decay, as described in Shamir & Zhang, 2013.
+class PolynomialAveragingState(NamedTuple):
+    """State for the Polynomial decay averaging algorithm."""
+    count: chex.Array  # shape=(), dtype=jnp.int32.
+    av_model: base.Params
 
-    Given parameters x_t at iteration t, the averaged parameters are updated as follows:
-    .. math::
-        \begin{aligned}
-            \bar{x}_t = (1 - \frac{1+\gamma}{t+\gamma}) \cdot \bar{x}_{t-1} + \frac{1+\gamma}{t+\gamma} \cdot x_t
-        \end{aligned}
-    """
+# the implementation is based on the transform.ema
+def polynomial_decay_averaging(
+        gamma: float = 8,
+) -> base.GradientTransformation:
 
-    def __init__(self, model: nn.Model, gamma: float = 8.):
-        self.t = 1
-        self.model = model
-        self.av_model = copy.deepcopy(model)
-        self.gamma = gamma
+    accumulator_dtype = utils.canonicalize_dtype(None)
+    
 
-    def step(self, params):
-        t = self.t
-        model_sd = state_dict(self.model)
-        av_sd = state_dict(self.av_model)
+    def init_fn(params):
+        return PolynomialAveragingState(
+            count=jnp.zeros([], jnp.int32),
+            av_model=jax.tree_util.tree_map(
+                lambda t: jnp.zeros_like(t, dtype=accumulator_dtype), params))
 
-        for k in model_sd.keys():
-            av_sd[k] = (1 - ((self.gamma + 1) / (self.gamma + t))) * av_sd[k] + ((self.gamma + 1) / (self.gamma + t)) * model_sd[k]
+    def update_fn(updates, state, params=None):
+        count_inc = optax.safe_int32_increment(state.count)  # should be used in dog as well
 
-        self.av_model = restore_state_dict(self.av_model, av_sd)
+        t = state.count
+        av_coef = (1 - ((gamma + 1) / (gamma + t)))
+        old_coef = ((gamma + 1) / (gamma + t))
+        new_av = jax.tree_util.tree_map(
+            lambda av, p, u: av_coef * av + old_coef * (p+u), state.av_model, params, updates)
 
-        self.t += 1
+        av_model = utils.cast_tree(new_av, accumulator_dtype)
+        return updates, PolynomialAveragingState(count=count_inc, av_model=av_model)
 
-    def reset(self):
-        self.t = 1
+    return base.GradientTransformation(init_fn, update_fn)
 
-    @property
-    def averaged_model(self):
-        """
-        @return: returns the averaged model (the polynomial decay averaged model)
-        """
-        return self.av_model
 
-    @property
-    def base_model(self):
-        """
-        @return: returns the base model (the one that is being trainer)
-        """
-        return self.model
-
-    def state_dict(self):
-        """
-        @return: returns the state dict of the averager.
-        Note that if you wish to save the averaged model itself, as a loadable weights checkpoint,
-        you should use averager.averaged_model.state_dict().
-        """
-        return {
-            't': self.t,
-            'av_model': state_dict(self.av_model)
-        }
-
-    def load_state_dict(self, state_dict):
-        """
-        Loads the state dict of the averager.
-        @param state_dict: A state dict as returned by averager.state_dict()
-        """
-        self.t = state_dict['t']
-        self.av_model = restore_state_dict(self.av_model, state_dict['av_model'])
+def get_av_model(opt_state):
+    for sub_state in opt_state:
+        if isinstance(sub_state, PolynomialAveragingState):
+            return sub_state.av_model
+        if isinstance(sub_state, tuple):
+            av_model = get_av_model(sub_state)
+            if av_model is not None:
+                return av_model
+    return None
