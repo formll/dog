@@ -1,3 +1,6 @@
+"""
+    JAX implementation of polynomial decay averaging (Shamir & Zhang, 2013)
+"""
 import chex
 import jax
 import jax.numpy as jnp
@@ -8,8 +11,8 @@ from typing import NamedTuple
 
 
 class PolynomialAveragingState(NamedTuple):
-    """State for the Polynomial decay averaging algorithm."""
-    count: chex.Array  # shape=(), dtype=jnp.int32.
+    """State for the Polynomial decay averaging algorithm (Shamir & Zhang, 2013)."""
+    count: chex.Array
     av_model: base.Params
 
 
@@ -17,6 +20,15 @@ class PolynomialAveragingState(NamedTuple):
 def polynomial_decay_averaging(
         gamma: float = 8,
 ) -> base.GradientTransformation:
+    """
+    Averaging model weights using a polynomial decay, as described in Shamir & Zhang, 2013.
+
+    Given parameters x_t at iteration t, the averaged parameters are updated as follows:
+    .. math::
+        \begin{aligned}
+            \bar{x}_t = (1 - \frac{1+\gamma}{t+\gamma}) \cdot \bar{x}_{t-1} + \frac{1+\gamma}{t+\gamma} \cdot x_t
+        \end{aligned}
+    """
     accumulator_dtype = utils.canonicalize_dtype(None)
 
     def init_fn(params):
@@ -40,7 +52,10 @@ def polynomial_decay_averaging(
     return base.GradientTransformation(init_fn, update_fn)
 
 
-def get_av_model(opt_state):
+def get_av_model(opt_state) -> base.Params:
+    """
+    Given an optimizer state, return the averaged model.
+    """
     for sub_state in opt_state:
         if isinstance(sub_state, PolynomialAveragingState):
             return sub_state.av_model

@@ -1,5 +1,5 @@
 """
-JAX implementation of the DoG/LDoG optimizers (Ivgi et al., 2023)
+    JAX implementation of the DoG/LDoG optimizers (Ivgi et al., 2023)
 """
 
 import chex
