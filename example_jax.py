@@ -1,10 +1,3 @@
-# pip install jax flax tensorflow-datasets
-# conda create -n jdog python=3.8
-# conda install -c conda-forge jax=0.3.25
-# pip install --upgrade jaxlib==0.4.11
-# Should try: pip install --upgrade jax jaxlib==0.1.70+cuda110 -f https://storage.googleapis.com/jax-releases/jax_releases.html
-# conda install -c conda-forge flax
-# conda install -c conda-forge tensorflow tensorflow-datasets
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -16,6 +9,7 @@ from flax.training import checkpoints
 from src.dog import DoGJAX, LDoGJAX, polynomial_decay_averaging, get_av_model
 import tensorflow_datasets as tfds
 
+
 def train_epoch(state, train_loader, train_step, epoch, log_interval):
     metrics = []
     for i, batch in enumerate(train_loader(), start=1):
@@ -25,8 +19,6 @@ def train_epoch(state, train_loader, train_step, epoch, log_interval):
         if i % log_interval == 0:
             print(f'Epoch: {epoch}, Step: {i}, Loss: {np.mean(metrics)}')
             metrics = []
-        if i == 250:  # TODO - remove!
-            break
     return state, {'loss': np.mean(metrics)}
 
 
@@ -60,8 +52,6 @@ def test_epoch(state, test_loader):
             'accuracy_av': np.mean(jnp.array(test_accuracy_av))}
 
 
-
-
 def get_data_loader(data_dir, batch_size, split='train'):
     dataset_builder = tfds.builder('mnist', data_dir=data_dir)
     dataset_builder.download_and_prepare()
@@ -71,7 +61,6 @@ def get_data_loader(data_dir, batch_size, split='train'):
     def gen():
         for batch in tfds.as_numpy(ds):
             images = batch['image'] / 255.0  # normalization
-            # images = np.expand_dims(images, axis=-1)
             labels = batch['label']
             yield {'image': images, 'label': labels}
 
@@ -91,8 +80,6 @@ class Net(nn.Module):
         self.conv2 = nn.Conv(features=64, kernel_size=(3, 3))
         self.fc1 = nn.Dense(features=128)
         self.fc2 = nn.Dense(features=10)
-        self.dropout1 = nn.Dropout(rate=0.25)
-        self.dropout2 = nn.Dropout(rate=0.5)
 
     def __call__(self, x):
         x = self.conv1(x)
@@ -100,11 +87,9 @@ class Net(nn.Module):
         x = self.conv2(x)
         x = jax.nn.relu(x)
         x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2))
-        # x = self.dropout1(x)  # couldn't make it work due to something with "detemenistic" needing to be passed
         x = jnp.reshape(x, (x.shape[0], -1))  # equivalent of torch.flatten(x, 1)
         x = self.fc1(x)
         x = jax.nn.relu(x)
-        # x = self.dropout2(x)
         x = self.fc2(x)
         return jax.nn.log_softmax(x, axis=-1)
 
@@ -123,7 +108,7 @@ def train_step(state, batch):
     return new_state, loss
 
 
-def create_model_and_optimizer(ldog, lr, seed=0):
+def create_model_and_optimizer(ldog, lr, reps_rel, gamma, weight_decay, seed=0, init_eta=None):
     model = Net()
 
     init_rng = jax.random.PRNGKey(seed)
@@ -131,9 +116,9 @@ def create_model_and_optimizer(ldog, lr, seed=0):
     initial_params = model.init(init_rng, inputs)['params']
 
     opt_class = LDoGJAX if ldog else DoGJAX
-    optimizer = opt_class(learning_rate=lr, reps_rel=1e-6, eps=1e-8, init_eta=None, weight_decay=0.0)
+    optimizer = opt_class(learning_rate=lr, reps_rel=reps_rel, eps=1e-8, init_eta=init_eta, weight_decay=weight_decay)
 
-    averager = polynomial_decay_averaging(gamma=8)  # TODO - get gamma from outside
+    averager = polynomial_decay_averaging(gamma=gamma)
     optimizer = optax.chain(optimizer, averager)
 
     return initial_params, model, optimizer
@@ -148,21 +133,17 @@ def main():
     ldog = True
     lr = 1.0
     reps_rel = 1e-6
-    init_eta = 0
+    init_eta = None
     avg_gamma = 8
     weight_decay = 0
     seed = 1
     log_interval = 10
     save_model = False
-    log_state = True
-    use_cuda = False #jax.devices("gpu")
-
-    device = use_cuda[0] if use_cuda else jax.devices("cpu")[0]
 
     # here we will have a placeholder function to simulate PyTorch's DataLoader
     train_loader, test_loader = get_data_loaders(batch_size, test_batch_size, data_dir)
 
-    initial_params, model, optimizer = create_model_and_optimizer(ldog, lr, seed)
+    initial_params, model, optimizer = create_model_and_optimizer(ldog, lr, reps_rel, avg_gamma, weight_decay, seed, init_eta)
 
     state = train_state.TrainState.create(
         apply_fn=model.apply, params=initial_params, tx=optimizer)
@@ -177,7 +158,6 @@ def main():
 
     if save_model:
         checkpoints.save_checkpoint(".", state, epoch, keep=3)
-        # checkpoints.save_checkpoint(".", averager.state, epoch, keep=3, prefix="averaged_model_")
 
 
 if __name__ == '__main__':
