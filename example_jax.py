@@ -13,7 +13,7 @@ from flax import linen as nn
 from flax.training import train_state
 from flax.training.common_utils import onehot
 from flax.training import checkpoints
-from src.jax import DoG, LDoG, polynomial_decay_averaging, get_av_model
+from src.dog import DoGJAX, LDoGJAX, polynomial_decay_averaging, get_av_model
 import tensorflow_datasets as tfds
 
 def train_epoch(state, train_loader, train_step, epoch, log_interval):
@@ -130,7 +130,7 @@ def create_model_and_optimizer(ldog, lr, seed=0):
     inputs = jnp.ones([1, 28, 28, 1], jnp.float32)
     initial_params = model.init(init_rng, inputs)['params']
 
-    opt_class = LDoG if ldog else DoG
+    opt_class = LDoGJAX if ldog else DoGJAX
     optimizer = opt_class(learning_rate=lr, reps_rel=1e-6, eps=1e-8, init_eta=None, weight_decay=0.0)
 
     averager = polynomial_decay_averaging(gamma=8)  # TODO - get gamma from outside
