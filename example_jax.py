@@ -2,15 +2,18 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+
 from flax import linen as nn
-from flax.training import train_state
+from flax.training import train_state, checkpoints
 from flax.training.common_utils import onehot
-from flax.training import checkpoints
+
 from src.dog import DoGJAX, LDoGJAX, polynomial_decay_averaging, get_av_model
+
 import tensorflow_datasets as tfds
 
 
 def train_epoch(state, train_loader, train_step, epoch, log_interval):
+    """Train the model for one epoch."""
     metrics = []
     for i, batch in enumerate(train_loader(), start=1):
         batch = jax.tree_map(lambda x: jnp.asarray(x).astype(jnp.float32), batch)
@@ -23,14 +26,17 @@ def train_epoch(state, train_loader, train_step, epoch, log_interval):
 
 
 def compute_loss(logits, labels):
+    """Compute the loss."""
     return -jnp.mean(jnp.sum(labels * logits, axis=-1))
 
 
 def compute_accuracy(logits, labels):
+    """Compute the accuracy."""
     return jnp.mean(jnp.argmax(logits, -1) == jnp.argmax(labels, -1))
 
 
 def test_epoch(state, test_loader):
+    """Test the model."""
     test_loss = []
     test_accuracy = []
     test_loss_av = []
@@ -53,6 +59,7 @@ def test_epoch(state, test_loader):
 
 
 def get_data_loader(data_dir, batch_size, split='train'):
+    """Get data loader."""
     dataset_builder = tfds.builder('mnist', data_dir=data_dir)
     dataset_builder.download_and_prepare()
     ds = dataset_builder.as_dataset(split=split)
@@ -68,13 +75,15 @@ def get_data_loader(data_dir, batch_size, split='train'):
 
 
 def get_data_loaders(train_batch_size, test_batch_size, data_dir):
+    """Get train and test data loaders."""
     train_ds = get_data_loader(data_dir=data_dir, batch_size=train_batch_size, split='train')
     test_ds = get_data_loader(data_dir=data_dir, batch_size=test_batch_size, split='test')
     return train_ds, test_ds
 
 
-# TODO - something about the network doesn't work as expected. Need to start with SGD, see that it works and then move to dog
 class Net(nn.Module):
+    """Define the neural network architecture."""
+
     def setup(self):
         self.conv1 = nn.Conv(features=32, kernel_size=(3, 3))
         self.conv2 = nn.Conv(features=64, kernel_size=(3, 3))
@@ -96,6 +105,8 @@ class Net(nn.Module):
 
 @jax.jit
 def train_step(state, batch):
+    """Define a training step."""
+
     def loss_fn(params):
         inputs, targets = batch
         preds = state.apply_fn({'params': params}, inputs)
@@ -109,6 +120,7 @@ def train_step(state, batch):
 
 
 def create_model_and_optimizer(ldog, lr, reps_rel, gamma, weight_decay, seed=0, init_eta=None):
+    """Create model and optimizer."""
     model = Net()
 
     init_rng = jax.random.PRNGKey(seed)
@@ -125,6 +137,7 @@ def create_model_and_optimizer(ldog, lr, reps_rel, gamma, weight_decay, seed=0, 
 
 
 def main():
+    """Main function."""
     # Training settings
     data_dir = '/specific/netapp5/joberant/data_nobck/maorivgi/cache/data'
     batch_size = 64
@@ -140,25 +153,28 @@ def main():
     log_interval = 10
     save_model = False
 
-    # here we will have a placeholder function to simulate PyTorch's DataLoader
     train_loader, test_loader = get_data_loaders(batch_size, test_batch_size, data_dir)
 
-    initial_params, model, optimizer = create_model_and_optimizer(ldog, lr, reps_rel, avg_gamma, weight_decay, seed, init_eta)
+    initial_params, model, optimizer = create_model_and_optimizer(ldog, lr, reps_rel, avg_gamma, weight_decay, seed,
+                                                                  init_eta)
 
     state = train_state.TrainState.create(
         apply_fn=model.apply, params=initial_params, tx=optimizer)
 
-
     for epoch in range(1, epochs + 1):
         state, train_metrics = train_epoch(state, train_loader, train_step, epoch, log_interval)
         test_metrics = test_epoch(state, test_loader)
-        #
-        print('Test set: Loss = {:.4f}, Accuracy = {:.2f}%, Loss_av = {:.4f}, Accuracy_av = {:.2f}%\n'.format(
-            test_metrics['loss'], test_metrics['accuracy'] * 100, test_metrics['loss_av'], test_metrics['accuracy_av'] * 100))
+
+        print(f'Test set: Loss = {test_metrics["loss"]:.4f}, '
+              f'Accuracy = {test_metrics["accuracy"] * 100:.2f}%, '
+              f'Loss (avg) = {test_metrics["loss_av"]:.4f}, '
+              f'Accuracy (avg) = {test_metrics["accuracy_av"] * 100:.2f}%')
 
     if save_model:
-        checkpoints.save_checkpoint(".", state, epoch, keep=3)
+        checkpoints.save_checkpoint('.', state, epoch)
 
+    print("Finished Training!")
 
 if __name__ == '__main__':
     main()
+
