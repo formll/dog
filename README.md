@@ -32,8 +32,11 @@ LDoG (layerwise DoG) is a variant of DoG that applies the above update rule sepa
 To install the package, simply run `pip install dog-optimizer`.
 
 ## Usage
+DoG is implemented using both the standard PyTorch optimizer interface, and using the standard JAX optax interface.
+
+### PyTorch usage
 DoG and LDoG are implemented using the standard pytorch optimizer interface. After installing the pacakge with `pip install dog-optimizer`,
-All you need to do is replace the line that creates your optimizer with 
+all you need to do is replace the line that creates your optimizer with 
 ```python
 from dog import DoG
 optimizer = DoG(optimizer args)
@@ -47,8 +50,30 @@ for LDoG,
 where `optimizer args` follows the standard pytorch optimizer syntex. 
 To see the list of all available parameters, run `help(DoG)` or `help(LDoG)`.
 
+### JAX usage
+DoG and LDoG are implemented using the standard optax interface. After installing the pacakge with `pip install dog-optimizer`,
+all you need to do is replace the line that creates your optimizer with 
+```python
+    from dog import DoGJAX as DoG, LDoGJAX as LDoG, polynomial_decay_averaging
+    import optax
+    ldog = True  # wther to use LDoG or DoG
+    opt_class = LDoG if ldog else DoG
+    optimizer = opt_class(learning_rate=1, reps_rel=1e-6, eps=1e-8, init_eta=None, weight_decay=0)
+
+    averager = polynomial_decay_averaging(gamma=8)
+    optimizer = optax.chain(optimizer, averager)
+```
+
+When you finish trianing (or evaluating a checkpoint) and want to get the averaged model, simply do
+```python
+    from dog import get_av_model
+    logits = state.apply_fn({'params': get_av_model(state.opt_state)}, batch['image'])
+    loss = compute_loss(logits, labels)
+    accuracy = compute_accuracy(logits, labels)
+```
+
 ### Iterate averaging
-We provide an implementation of the polynomial decay averaging used throughout our experimentes. TO use it simply create a `PolynomialDecayAverager` with 
+We provide an implementation of the polynomial decay averaging used throughout our experimenters. To use it simply creates a `PolynomialDecayAverager` with 
 ```python
 from dog import PolynomialDecayAverager
 averager = PolynomialDecayAverager(model)
@@ -57,8 +82,10 @@ then, after each `optimizer.step()`, call `averager.step()` as well.
 You can then get both the current model and the averaged model with `averager.base_model` and `averager.averaged_model` respectively.
 
 ### Example script
-An example of how to use the above to train a simple CNN on MNIST can be found in `examples/mnist.py` 
+An example of how to use the above to train a simple CNN on MNIST can be found in `examples.py` 
 (based on this [pytorch example](https://github.com/pytorch/examples/blob/main/mnist/main.py)).
+
+An additional example of using the JAX implementation can be found in `jax_example.py`.
 
 ### Choosing `reps_rel`
 DoG is parameter-free by design, so there is no need to tune a learning rate parameter. 
@@ -79,10 +106,10 @@ This happened when training models with batch normalization; setting `reps_rel` 
 
 ## Citation
 ```
-@article{ivgi2023dog,
-  title={{D}o{G} is {SGD}'s Best Friend: A Parameter-Free Dynamic Step Size Schedule}, 
-  author={Maor Ivgi and Oliver Hinder and Yair Carmon}, 
-  journal={arXiv:2302.12022}, 
+@inproceedings{ivgi2023dog,
+  title={{D}o{G} is {SGD}'s best friend: A parameter-free dynamic step size schedule},
+  author={Maor Ivgi and Oliver Hinder and Yair Carmon},
+  booktitle={International Conference on Machine Learning (ICML)},
   year={2023},
-}  
+}
 ```

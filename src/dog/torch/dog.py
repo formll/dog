@@ -17,7 +17,7 @@ class DoG(Optimizer):
        IMPORTANT: for best performance, DoG must be combined with iterate averaging.
     """
 
-    __version__ = '1.0.3'
+    __version__ = '1.1.0'
 
     def __init__(self, params, reps_rel: float = 1e-6, lr: float = 1.0,
                  weight_decay: float = 0.0, eps: float = 1e-8, init_eta: Optional[float] = None):
