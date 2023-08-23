@@ -7,7 +7,7 @@ from flax import linen as nn
 from flax.training import train_state, checkpoints
 from flax.training.common_utils import onehot
 
-from src.dog import DoGJAX, LDoGJAX, polynomial_decay_averaging, get_av_model
+from dog import DoGJAX, LDoGJAX, polynomial_decay_averaging, get_av_model
 
 import tensorflow_datasets as tfds
 
@@ -27,12 +27,12 @@ def train_epoch(state, train_loader, train_step, epoch, log_interval):
 
 def compute_loss(logits, labels):
     """Compute the loss."""
-    return -jnp.mean(jnp.sum(labels * logits, axis=-1))
+    return jax.lax.neg((labels * logits).sum(-1).mean())
 
 
 def compute_accuracy(logits, labels):
     """Compute the accuracy."""
-    return jnp.mean(jnp.argmax(logits, -1) == jnp.argmax(labels, -1))
+    return jnp.mean(jnp.equal(jnp.argmax(logits, axis=-1), jnp.argmax(labels, -1)))
 
 
 def test_epoch(state, test_loader):

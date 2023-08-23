@@ -14,11 +14,6 @@ from optax._src.alias import _scale_by_learning_rate
 from typing import Optional, NamedTuple
 
 
-@jax.jit
-def _sum_params(params: base.Params) -> chex.Array:
-    """Compute sum(params)."""
-    sums = jax.tree_util.tree_map(jnp.sum, params)
-    return jax.tree_util.tree_reduce(operator.add, sums)
 
 
 @jax.jit
@@ -26,7 +21,8 @@ def _params_squared_norm(params: base.Params, other: Optional[base.Params]=None)
     """Compute the l2 norm ||params - other||^2 if other is given, otherwise compute ||params||^2."""
     if other is not None:
         params = jax.tree_util.tree_map(lambda x, y: x - y, params, other)
-    return _sum_params(jax.tree_map(lambda x: jnp.sum(x ** 2), params))
+    squared_params_sums = jax.tree_map(lambda x: jnp.sum(x**2), params)
+    return jax.tree_reduce(jnp.add, squared_params_sums)
 
 
 @jax.jit
